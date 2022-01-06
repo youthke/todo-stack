@@ -10,6 +10,7 @@ import {
 } from "react-native";
 import Constants from "expo-constants";
 import * as SQLite from "expo-sqlite";
+import { doneTodo, insertTodo, prepareTodoTable, selectFinishedTodos, selectUnFinishedTodos } from "../queries/todoqueties";
 
 function openDatabase() {
   if (Platform.OS === "web") {
@@ -29,16 +30,10 @@ function openDatabase() {
 const db = openDatabase();
 
 function Items({ done: doneHeading, onPressItem }) {
-  const [items, setItems] = useState(null);
+  const [items, setItems] = useState<any[]>([]);
 
   useEffect(() => {
-    db.transaction((tx) => {
-      tx.executeSql(
-        `select * from items where done = ?;`,
-        [doneHeading ? 1 : 0],
-        (_, { rows: { _array } }) => setItems(_array)
-      );
-    });
+    selectUnFinishedTodos(db, setItems)
   }, []);
 
   const heading = doneHeading ? "Completed" : "Todo";
@@ -69,33 +64,19 @@ function Items({ done: doneHeading, onPressItem }) {
 }
 
 const  TodoScreen = () => {
-  const [text, setText] = useState(null);
+  const [text, setText] = useState<string>("");
   const [forceUpdate, forceUpdateId] = useForceUpdate();
 
   useEffect(() => {
-    db.transaction((tx) => {
-      tx.executeSql(
-        "create table if not exists items (id integer primary key not null, done int, value text);"
-      );
-    });
+    prepareTodoTable(db)
   }, []);
 
-  const add = (text) => {
+  const add = (text: string) => {
     // is text empty?
     if (text === null || text === "") {
       return false;
     }
-
-    db.transaction(
-      (tx) => {
-        tx.executeSql("insert into items (done, value) values (0, ?)", [text]);
-        tx.executeSql("select * from items", [], (_, { rows }) =>
-          console.log(JSON.stringify(rows))
-        );
-      },
-      null,
-      forceUpdate
-    );
+    insertTodo(text, db, forceUpdate)
   };
 
   return (
@@ -117,7 +98,7 @@ const  TodoScreen = () => {
               onChangeText={(text) => setText(text)}
               onSubmitEditing={() => {
                 add(text);
-                setText(null);
+                setText("");
               }}
               placeholder="what do you need to do?"
               style={styles.input}
@@ -128,29 +109,8 @@ const  TodoScreen = () => {
             <Items
               key={`forceupdate-todo-${forceUpdateId}`}
               done={false}
-              onPressItem={(id) =>
-                db.transaction(
-                  (tx) => {
-                    tx.executeSql(`update items set done = 1 where id = ?;`, [
-                      id,
-                    ]);
-                  },
-                  null,
-                  forceUpdate
-                )
-              }
-            />
-            <Items
-              done
-              key={`forceupdate-done-${forceUpdateId}`}
-              onPressItem={(id) =>
-                db.transaction(
-                  (tx) => {
-                    tx.executeSql(`delete from items where id = ?;`, [id]);
-                  },
-                  null,
-                  forceUpdate
-                )
+              onPressItem={(id: number) =>
+                doneTodo(id, db, forceUpdate)
               }
             />
           </ScrollView>
